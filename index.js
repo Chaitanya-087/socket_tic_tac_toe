@@ -1,17 +1,36 @@
-const { v4 } = require('uuid')
-
-const io = require('socket.io')(8080, {
+const { v4: uuidV4 } = require('uuid')
+const express = require('express')
+const cors = require('cors')
+const app = express()
+const http = require('http')
+const server = http.createServer(app)
+const { Server } = require('socket.io')
+const io = new Server(server, {
     cors: {
-        origin: "*"
+        origin: "*",
     }
 })
 
+app.use(express.json())
+
+app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin","*");
+    res.header(
+        "Access-Control-Allow-Headers",
+        "Origin, X-Requested-With, Content-Type, Accept"
+    );
+    next();
+});
+
+app.get('/', (req, res) => {
+    res.send({ "message": "Hello, World!!" })
+})
 rooms = {}
 
 io.on('connection', socket => {
 
     socket.on('create room', () => {
-        const roomID = v4().slice(0, 8)
+        const roomID = uuidV4().slice(0, 8)
         rooms[roomID] = {
             users: [],
             state: {
@@ -46,7 +65,9 @@ io.on('connection', socket => {
         rooms[roomID]?.users.splice(index, 1)
         socket.leave(roomID)
         console.log(rooms)
-        
+
     })
 })
 
+
+module.exports = { app, server }
