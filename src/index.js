@@ -1,15 +1,23 @@
 require('dotenv').config()
+
 const { v4: uuidV4 } = require('uuid')
+const http = require('http')
 const { Server } = require('socket.io')
 
 const PORT = process.env.PORT
-const io = new Server(PORT, {
+const server = http.createServer()
+
+const io = new Server(server, {
     cors: {
-        origin: "*",
-    },
+        origin: '*'
+    }
 })
 
 const rooms = [] //rooms in server
+
+const checkState = (board, player) => {
+
+}
 
 io.on('connection', socket => {
     //create room
@@ -32,8 +40,8 @@ io.on('connection', socket => {
     // join a room 
     socket.on('join room', (roomID) => {
         const room = rooms.find(room => room.roomID === roomID);
-        console.log('room:',room)
-        if (!room) { 
+        console.log('room:', room)
+        if (!room) {
             console.log('why')
             socket.emit('invalid room') // no room found 
             return
@@ -43,7 +51,7 @@ io.on('connection', socket => {
             socket.emit('room full') // room should have  only two players
             return
         }
-        
+
         socket.emit('userID', socket.id) // send user id to client 
         const idx = rooms.indexOf(room)
         const user = {
@@ -55,7 +63,7 @@ io.on('connection', socket => {
             users: rooms[idx].users,
             state: rooms[idx].state,
         })
-        console.log('rooms:',rooms)
+        console.log('rooms:', rooms)
         socket.join(roomID)
     })
     // make a move 
@@ -82,8 +90,7 @@ io.on('connection', socket => {
 
         state.currentPlayer = state.currentPlayer === 'x' ? 'o' : 'x'
         state.turn = users[(currentPlayerIndex + 1) % users.length].id
-        console.log('state:',state)
-        
+
         io.to(roomID).emit('update', state)
     })
 
@@ -106,9 +113,15 @@ io.on('connection', socket => {
         } else if (userIndex === 0) {
             room.state.turn = room.users[0].id;
         }
-        console.log(rooms)
         socket.leave(roomID)
         io.to(roomID).emit('update', room.state)
 
     })
+    socket.on('disconnect', () => {
+
+    })
+})
+
+server.listen(PORT, () => {
+    console.log(`server running on: ${PORT}`)
 })
