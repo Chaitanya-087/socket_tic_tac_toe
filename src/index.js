@@ -9,8 +9,10 @@ const server = http.createServer()
 
 const io = new Server(server, {
     cors: {
-        origin: ['http://localhost:5000', 'https://tic-tac-toe-alpha-blue.vercel.app/', 'https://tic-tac-toe-5teh.onrender.com/']
-    }
+        origin: ['http://localhost:5000', 'https://tic-tac-toe-alpha-blue.vercel.app/', 'https://tic-tac-toe-5teh.onrender.com/'],
+        credentials: true,
+    },
+    
 })
 
 const rooms = [] //rooms in server
