@@ -9,13 +9,33 @@ const server = http.createServer()
 
 const io = new Server(server, {
     cors: {
-        origin: '*'
+        origin: ['http://localhost:5000', 'https://tic-tac-toe-alpha-blue.vercel.app/', 'https://tic-tac-toe-5teh.onrender.com/']
     }
 })
 
 const rooms = [] //rooms in server
 
 const checkState = (board, player) => {
+    // check rows
+    for (let i = 0; i < 9; i += 3) {
+        if (board[i] === player && board[i + 1] === player && board[i + 2] === player) {
+            return [true, [i, i + 1, i + 2]]
+        }
+    }
+    // check columns
+    for (let i = 0; i < 3; i++) {
+        if (board[i] === player && board[i + 3] === player && board[i + 6] === player) {
+            return [true, [i, i + 3, i + 6]]
+        }
+    }
+    // check diagonals
+    if (board[0] === player && board[4] === player && board[8] === player) {
+        return [true, [0, 4, 8]]
+    }
+    if (board[2] === player && board[4] === player && board[6] === player) {
+        return [true, [2, 4, 6]]
+    }
+    return [false, []]
 
 }
 
@@ -30,7 +50,7 @@ io.on('connection', socket => {
                 board: new Array(9).fill(""),
                 turn: socket.id,
                 currentPlayer: 'x',
-                winner: "",
+                winner: {},
             }
         }
         rooms.push(room) // add new room to rooms array
@@ -40,15 +60,14 @@ io.on('connection', socket => {
     // join a room 
     socket.on('join room', (roomID) => {
         const room = rooms.find(room => room.roomID === roomID);
-        console.log('room:', room)
         if (!room) {
-            console.log('why')
             socket.emit('invalid room') // no room found 
             return
         }
 
         if (room.users.length >= 2) {
             socket.emit('room full') // room should have  only two players
+            socket.disconnect()
             return
         }
 
@@ -63,16 +82,33 @@ io.on('connection', socket => {
             users: rooms[idx].users,
             state: rooms[idx].state,
         })
-        console.log('rooms:', rooms)
         socket.join(roomID)
     })
+
     // make a move 
     socket.on('move', ({ index, roomID }) => {
         const room = rooms.find(room => room.roomID === roomID)
-        if (room) {
-            room.state.board[index] = room.state.currentPlayer
-            io.to(roomID).emit('update', room.state)
+        if (!room) return
+        const { state } = room
+        state.board[index] = state.currentPlayer
+        const winState = checkState(state.board, state.currentPlayer)
+
+        if (winState[0]) {
+            state.winner['status'] = 'win'
+            state.winner['id'] = socket.id
+            state.winner['symbol'] = state.currentPlayer
+            state.winner['winningSquares'] = winState[1]
+        } 
+        
+        else if (state.board.every(square => square !== "")) {
+            state.winner['status'] = 'draw'
+            state.winner['id'] = 'draw'
+            state.winner['symbol'] = 'draw'
+            state.winner['winningSquares'] = []
         }
+
+        io.to(roomID).emit('update', state)
+        console.log(state)
     })
     // swap player
     socket.on('change player', (roomID) => {
@@ -81,6 +117,7 @@ io.on('connection', socket => {
             socket.emit('invalid room')
             return
         }
+
         const { users, state } = room
         const currentPlayerIndex = users.findIndex(user => user.id === socket.id)
         if (currentPlayerIndex < 0) {
@@ -90,7 +127,6 @@ io.on('connection', socket => {
 
         state.currentPlayer = state.currentPlayer === 'x' ? 'o' : 'x'
         state.turn = users[(currentPlayerIndex + 1) % users.length].id
-
         io.to(roomID).emit('update', state)
     })
 
@@ -117,8 +153,22 @@ io.on('connection', socket => {
         io.to(roomID).emit('update', room.state)
 
     })
-    socket.on('disconnect', () => {
 
+    socket.on('disconnect', () => {
+        const room = rooms.find(room => room.users.some(user => user.id === socket.id))
+        if (!room) {
+            return
+        }
+        const roomIndex = rooms.indexOf(room)
+        const userIndex = room.users.findIndex(user => user.id === socket.id)
+        room.users.splice(userIndex, 1)
+
+        if (room.users.length === 0) {
+            rooms.splice(roomIndex, 1)
+        } else if (userIndex === 0) {
+            room.state.turn = room.users[0].id;
+        }
+        io.to(room.roomID).emit('update', room.state)
     })
 })
 
