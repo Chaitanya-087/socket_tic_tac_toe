@@ -12,7 +12,6 @@ const io = new Server(server, {
         origin: ['http://localhost:5000', 'https://tic-tac-toe-alpha-blue.vercel.app/', 'https://tic-tac-toe-5teh.onrender.com/'],
         credentials: true,
     },
-    
 })
 
 const rooms = [] //rooms in server
@@ -50,7 +49,7 @@ io.on('connection', socket => {
             users: [],
             state: {
                 board: new Array(9).fill(""),
-                turn: socket.id,
+                turn: "",
                 currentPlayer: 'x',
                 winner: {},
             }
@@ -67,7 +66,7 @@ io.on('connection', socket => {
             return
         }
 
-        if (room.users.length >= 2) {
+        if (room.users.length > 2) {
             socket.emit('room full') // room should have  only two players
             socket.disconnect()
             return
@@ -80,11 +79,13 @@ io.on('connection', socket => {
             symbol: room.users.length === 0 ? 'x' : 'o'
         }
         rooms[idx].users.push(user) // add the new user to room users array
-        io.to(roomID).emit('initial state', {
-            users: rooms[idx].users,
-            state: rooms[idx].state,
-        })
-        socket.join(roomID)
+        rooms[idx].state.turn = rooms[idx].users[0].id // set the turn to the first user joined the room
+
+        io.to(roomID).emit('users', rooms[idx].users)
+        io.to(roomID).emit('update', rooms[idx].state)
+
+        socket.join(roomID) // join the room
+        console.log(rooms[idx].users)
     })
 
     // make a move 
@@ -94,14 +95,13 @@ io.on('connection', socket => {
         const { state } = room
         state.board[index] = state.currentPlayer
         const winState = checkState(state.board, state.currentPlayer)
-
         if (winState[0]) {
             state.winner['status'] = 'win'
             state.winner['id'] = socket.id
             state.winner['symbol'] = state.currentPlayer
             state.winner['winningSquares'] = winState[1]
-        } 
-        
+        }
+
         else if (state.board.every(square => square !== "")) {
             state.winner['status'] = 'draw'
             state.winner['id'] = 'draw'
@@ -109,8 +109,7 @@ io.on('connection', socket => {
             state.winner['winningSquares'] = []
         }
 
-        io.to(roomID).emit('update', state)
-        console.log(state)
+        io.to(roomID).emit('update', state);
     })
     // swap player
     socket.on('change player', (roomID) => {
@@ -129,6 +128,21 @@ io.on('connection', socket => {
 
         state.currentPlayer = state.currentPlayer === 'x' ? 'o' : 'x'
         state.turn = users[(currentPlayerIndex + 1) % users.length].id
+        io.to(roomID).emit('update', state)
+    })
+
+    // restart game
+    socket.on('restart', (roomID) => {
+        const room = rooms.find(room => room.roomID === roomID)
+        if (!room) {
+            socket.emit('invalid room')
+            return
+        }
+        const { state, users } = room
+        state.board = new Array(9).fill("")
+        state.winner = {}
+        state.turn = users[0].id
+        state.currentPlayer = 'x'
         io.to(roomID).emit('update', state)
     })
 
@@ -153,7 +167,6 @@ io.on('connection', socket => {
         }
         socket.leave(roomID)
         io.to(roomID).emit('update', room.state)
-
     })
 
     socket.on('disconnect', () => {
