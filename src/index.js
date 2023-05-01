@@ -1,8 +1,9 @@
-require('dotenv').config()
+import dotenv from 'dotenv'
+import { nanoid } from 'nanoid'
+import http from 'http'
+import { Server } from 'socket.io'
 
-const { v4: uuidV4 } = require('uuid')
-const http = require('http')
-const { Server } = require('socket.io')
+dotenv.config()
 
 const PORT = process.env.PORT
 const server = http.createServer()
@@ -43,7 +44,7 @@ const checkState = (board, player) => {
 io.on('connection', socket => {
     //create room
     socket.on('create room', () => {
-        const roomID = uuidV4().slice(0, 8)
+        const roomID = nanoid(8)
         const room = {
             roomID: roomID,
             users: [],
@@ -66,26 +67,36 @@ io.on('connection', socket => {
             return
         }
 
-        if (room.users.length > 2) {
+        if (room.users.length >= 2) {
             socket.emit('room full') // room should have  only two players
             socket.disconnect()
             return
         }
 
-        socket.emit('userID', socket.id) // send user id to client 
         const idx = rooms.indexOf(room)
+
         const user = {
             id: socket.id,
             symbol: room.users.length === 0 ? 'x' : 'o'
         }
+
         rooms[idx].users.push(user) // add the new user to room users array
-        rooms[idx].state.turn = rooms[idx].users[0].id // set the turn to the first user joined the room
-
-        io.to(roomID).emit('users', rooms[idx].users)
-        io.to(roomID).emit('update', rooms[idx].state)
-
+        rooms[idx].state.turn = rooms[idx].users[0].id // set the turn to the first user
+        socket.emit('userID', socket.id) // send user id to client
+        
+        io.to(roomID).emit('users', room.users)
+        io.to(roomID).emit('update', rooms[idx].state);
+        
         socket.join(roomID) // join the room
-        console.log(rooms[idx].users)
+    })
+
+    socket.on('online users', (roomID) => {
+        const room = rooms.find(room => room.roomID === roomID)
+        if (!room) {
+            socket.emit('invalid room')
+            return
+        }
+        io.to(roomID).emit('users', room.users)
     })
 
     // make a move 
@@ -158,6 +169,7 @@ io.on('connection', socket => {
         if (userIndex === -1) {
             return;
         }
+
         room.users.splice(userIndex, 1)
 
         if (room.users.length === 0) {
